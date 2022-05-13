@@ -116,6 +116,7 @@ public class ClientHandler {
             e.printStackTrace();
         }
     }
+
     void showMessage(String time, String user, String message) {
         try {
             dataOutputStream.writeUTF(time + " " + user + ": " + message);

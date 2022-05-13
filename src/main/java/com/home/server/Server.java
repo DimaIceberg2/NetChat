@@ -1,5 +1,7 @@
 package com.home.server;
 
+import com.home.server.entitiys.Message;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -36,6 +38,11 @@ public class Server {
     public void broadcast(String message) {
         for(ClientHandler i : clients){
             i.showMessage(message);
+        }
+    }
+    public void broadcast(Message message) {
+        for(ClientHandler i : clients){
+            i.showMessage(message.getTime(), message.getUser().getName(), message.getMessage());
         }
     }
 }

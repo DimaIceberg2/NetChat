@@ -24,6 +24,18 @@ public class Message {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private User user;
 
+    public String getTime() {
+        return time;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
     public Message() {}
     public Message(String time, String message, User user) {
         this.time = time;

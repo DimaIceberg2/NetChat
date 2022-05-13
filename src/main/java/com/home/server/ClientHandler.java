@@ -4,12 +4,14 @@ import com.home.server.entitiys.Message;
 import com.home.server.entitiys.User;
 import org.hibernate.Session;
 
+import javax.persistence.Query;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Date;
+import java.util.List;
 
 public class ClientHandler {
     private Socket socket;
@@ -53,9 +55,22 @@ public class ClientHandler {
                             for (ClientHandler i : server.getClients()) {
                                 dataOutputStream.writeUTF(i.getUser().getName());
                             }
+                        } else if (message.matches("/showhistory .*")) {
+                            dataOutputStream.writeUTF("History:");
+                            int countRows = Integer.parseInt(message.replaceAll("\\D+",""));
+                            Session session = MainApp.sessionFactory.getCurrentSession();
+                            session.beginTransaction();
+                            List<Message>listLastMessages =  session.createQuery("FROM Message order by id DESC").setMaxResults(countRows).getResultList();
+                            for (int i = countRows - 1; i >= 0; i--) {
+                                dataOutputStream.writeUTF(listLastMessages.get(i).getTime() + " " +
+                                        listLastMessages.get(i).getMessage() + " " +
+                                        listLastMessages.get(i).getUser().getName());
+                            }
+                            session.getTransaction().rollback();
+
                         } else {
-                            server.broadcast(user.getName() + ": " + message);
                             Date date = new Date();
+                            server.broadcast(new Message(date.toString(), message, user));
                             addMessageToDB(new Message(date.toString(), message, user));
                         }
                     } catch (IOException e) {
@@ -97,6 +112,13 @@ public class ClientHandler {
     void showMessage(String message) {
         try {
             dataOutputStream.writeUTF(message);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    void showMessage(String time, String user, String message) {
+        try {
+            dataOutputStream.writeUTF(time + " " + user + ": " + message);
         } catch (IOException e) {
             e.printStackTrace();
         }

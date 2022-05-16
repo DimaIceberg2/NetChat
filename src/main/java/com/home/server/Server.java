@@ -1,13 +1,12 @@
 package com.home.server;
 
-import com.home.server.entitiys.Message;
+import redis.clients.jedis.Jedis;
 
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Vector;
 
 public class Server {
     private static ServerSocket serverSocket;
@@ -24,7 +23,7 @@ public class Server {
             while (true) {
                 try {
                     Socket socket = serverSocket.accept();
-                    clients.add(new ClientHandler(this, socket));
+                    clients.add(new ClientHandler(this, socket, new Jedis("localhost", 6379), "history"));
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -38,11 +37,6 @@ public class Server {
     public void broadcast(String message) {
         for(ClientHandler i : clients){
             i.showMessage(message);
-        }
-    }
-    public void broadcast(Message message) {
-        for(ClientHandler i : clients){
-            i.showMessage(message.getTime(), message.getUser().getName(), message.getMessage());
         }
     }
 }

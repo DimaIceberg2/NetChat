@@ -1,14 +1,11 @@
 package com.home.server;
 
-import com.home.server.entitiys.Message;
-import com.home.server.entitiys.User;
 import org.hibernate.Session;
+import redis.clients.jedis.Jedis;
 
-import javax.persistence.Query;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Date;
 import java.util.List;
@@ -17,17 +14,14 @@ public class ClientHandler {
     private Socket socket;
     private DataInputStream dataInputStream;
     private DataOutputStream dataOutputStream;
-
+    private Jedis jedis;
     private User user;
+    private String listNameJedis;
 
-    public User getUser() {
-        return user;
-    }
-
-    private Message message;
-
-    public ClientHandler(Server server, Socket socket) {
+    public ClientHandler(Server server, Socket socket, Jedis jedis, String listNameJedis) {
         try {
+            this.listNameJedis = listNameJedis;
+            this.jedis = jedis;
             this.socket = socket;
             dataInputStream = new DataInputStream(this.socket.getInputStream());
             dataOutputStream = new DataOutputStream(this.socket.getOutputStream());
@@ -35,7 +29,6 @@ public class ClientHandler {
             String name = dataInputStream.readUTF();
             if (name.equals("/exit")) return;
             user = new User(name);
-            addUserToDB();
             System.out.println(name + " is connected");
             dataOutputStream.writeUTF("Hello, " + user.getName() + "! NetChat have " + (server.getClients().size() + 1) + " users!");
             dataOutputStream.writeUTF("Print available commands /help");
@@ -47,31 +40,23 @@ public class ClientHandler {
                         if (message.equals("/exit")) {
                             System.out.println(user.getName() + " is disconnected");
                             server.broadcast(user.getName() + " is disconnected");
-                            removeUserFromDB();
                             server.getClients().remove(this);
                             break;
                         } else if(message.equals("/userlist")) {
                             dataOutputStream.writeUTF("Active users:");
                             for (ClientHandler i : server.getClients()) {
-                                dataOutputStream.writeUTF(i.getUser().getName());
+                                dataOutputStream.writeUTF(i.user.getName());
                             }
                         } else if (message.matches("/showhistory .*")) {
                             dataOutputStream.writeUTF("History:");
                             int countRows = Integer.parseInt(message.replaceAll("\\D+",""));
-                            Session session = MainApp.sessionFactory.getCurrentSession();
-                            session.beginTransaction();
-                            List<Message>listLastMessages =  session.createQuery("FROM Message order by id DESC").setMaxResults(countRows).getResultList();
-                            for (int i = countRows - 1; i >= 0; i--) {
-                                dataOutputStream.writeUTF(listLastMessages.get(i).getTime() + " " +
-                                        listLastMessages.get(i).getMessage() + " " +
-                                        listLastMessages.get(i).getUser().getName());
-                            }
-                            session.getTransaction().rollback();
+                            showHistory(countRows);
 
                         } else {
                             Date date = new Date();
-                            server.broadcast(new Message(date.toString(), message, user));
-                            addMessageToDB(new Message(date.toString(), message, user));
+                            server.broadcast(message);
+                            addMessageToDB(message, date);
+
                         }
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -85,28 +70,8 @@ public class ClientHandler {
         }
     }
 
-    void addUserToDB() {
-        Session session = MainApp.sessionFactory.getCurrentSession();
-        session.beginTransaction();
-        session.save(user);
-        session.getTransaction().commit();
-        session.close();
-    }
-
-    void addMessageToDB(Message message) {
-        Session session = MainApp.sessionFactory.getCurrentSession();
-        session.beginTransaction();
-        session.save(message);
-        session.getTransaction().commit();
-        session.close();
-    }
-
-    void removeUserFromDB(){
-        Session session = MainApp.sessionFactory.getCurrentSession();
-        session.beginTransaction();
-        session.remove(user);
-        session.getTransaction().commit();
-        session.close();
+    void addMessageToDB(String message, Date date) {
+        jedis.rpush(listNameJedis, date + " " + user.getName() + ": " + message);
     }
 
     void showMessage(String message) {
@@ -117,9 +82,13 @@ public class ClientHandler {
         }
     }
 
-    void showMessage(String time, String user, String message) {
+    void showHistory(int countRows) {
         try {
-            dataOutputStream.writeUTF(time + " " + user + ": " + message);
+            if (jedis.llen(listNameJedis) < countRows) countRows = (int)jedis.llen(listNameJedis);
+            List<String> list = jedis.lrange(listNameJedis, jedis.llen(listNameJedis) - countRows, jedis.llen(listNameJedis));
+            for (String i : list) {
+                dataOutputStream.writeUTF(i);
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
